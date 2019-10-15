@@ -293,13 +293,18 @@ void SlamGMapping::startReplay(const std::string & bag_fname, std::string scan_t
   
   std::vector<std::string> topics;
   topics.push_back(std::string("/tf"));
+ // topics.push_back(std::string("/tf_static"));
   topics.push_back(scan_topic);
   rosbag::View viewall(bag, rosbag::TopicQuery(topics));
+
+  rosbag::View view_tf_static(bag, rosbag::TopicQuery("/tf_static"));
 
   // Store up to 5 messages and there error message (if they cannot be processed right away)
   std::queue<std::pair<sensor_msgs::LaserScan::ConstPtr, std::string> > s_queue;
   foreach(rosbag::MessageInstance const m, viewall)
   {
+    std_msgs::Header::_stamp_type curr_timeStamp;
+
     tf::tfMessage::ConstPtr cur_tf = m.instantiate<tf::tfMessage>();
     if (cur_tf != NULL) {
       for (size_t i = 0; i < cur_tf->transforms.size(); ++i)
@@ -307,8 +312,26 @@ void SlamGMapping::startReplay(const std::string & bag_fname, std::string scan_t
         geometry_msgs::TransformStamped transformStamped;
         tf::StampedTransform stampedTf;
         transformStamped = cur_tf->transforms[i];
+        curr_timeStamp = transformStamped.header.stamp;
         tf::transformStampedMsgToTF(transformStamped, stampedTf);
         tf_.setTransform(stampedTf);
+      }
+
+      //Dirty and bad fix to include and make tf_static usable.
+      foreach(rosbag::MessageInstance const m2, view_tf_static)
+      {
+        tf::tfMessage::ConstPtr cur_tf = m2.instantiate<tf::tfMessage>();
+        if (cur_tf != NULL) {
+          for (size_t i = 0; i < cur_tf->transforms.size(); ++i)
+          {
+            geometry_msgs::TransformStamped transformStamped;
+            tf::StampedTransform stampedTf;
+            transformStamped = cur_tf->transforms[i];
+            transformStamped.header.stamp = curr_timeStamp;
+            tf::transformStampedMsgToTF(transformStamped, stampedTf);
+            tf_.setTransform(stampedTf);
+          }
+        }
       }
     }
 
